@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Bonsai is an HTML minifier written in pure Swift with zero external dependencies. It replicates the output of html-minifier-next's conservative preset. The public API is a single static method: `Bonsai.minifyHTML(_:) -> String`.
+Bonsai is an HTML minifier written in pure Swift with zero external dependencies. It replicates the output of html-minifier-next with a specific set of options (see Feature Mapping below). The public API is a single static method: `Bonsai.minifyHTML(_:) -> String`.
 
 ## Commands
 
@@ -29,7 +29,7 @@ Two source files in `Sources/Bonsai/`:
 
 Other directories:
 
-- `Tests/BonsaiTests/BonsaiTests.swift` — 183 test cases ported from html-minifier-next's test suite.
+- `Tests/BonsaiTests/BonsaiTests.swift` — 149 test cases ported from html-minifier-next's test suite.
 - `Benchmark/` — Simple benchmark harness using a fixture HTML file.
 - `Scripts/generate_hashes.py` — Generates FNV-1a hash constants for Constants.swift.
 
@@ -39,3 +39,31 @@ Other directories:
 - `Bonsai` is a caseless `public enum` used as a namespace; `minifyHTML` is its only `public static` method. All helpers are `private` free functions outside the enum
 - Case-sensitive matching: `preserveWhitespaceHashes` uses exact-case FNV hashes (only lowercase `pre`, `textarea` match), while `rawContentElementHashes` and `voidElementHashes` use lowercased FNV hashes
 - All parsing uses integer indexing into `UnsafeBufferPointer<UInt8>` — no `String.Index` except in the rare `findSubstringInString` helper for conditional comments
+
+## html-minifier-next Feature Mapping
+
+Bonsai implements these html-minifier-next options (always on, not configurable):
+
+| Bonsai behavior | html-minifier-next option | Notes |
+|---|---|---|
+| Case-sensitive tag/attribute matching | `caseSensitive: true` | Only lowercase `pre`, `textarea` trigger whitespace preservation |
+| Collapse boolean attributes | `collapseBooleanAttributes: true` | Also handles draggable, crossorigin, contenteditable |
+| Smart whitespace collapsing | `collapseWhitespace: true` | Inline/block-aware, NOT conservativeCollapse, NOT preserveLineBreaks |
+| Remove comments | `removeComments: true` | Keeps `<!--! -->` bang comments and conditional comments |
+| Remove empty attributes | `removeEmptyAttributes: true` | class, id, style, title, lang, dir, value, event handlers |
+| Remove redundant attributes | `removeRedundantAttributes: true` | Default values, script language/charset, a name matching id |
+| Remove script type attributes | `removeScriptTypeAttributes: true` | Removes `type="text/javascript"` and variants |
+| Remove style/link type attributes | `removeStyleLinkTypeAttributes: true` | Removes `type="text/css"` from style and link |
+| Shorten doctype | `useShortDoctype: true` | All doctypes become `<!doctype html>` |
+
+Features Bonsai does NOT implement:
+- `collapseInlineTagWhitespace`, `conservativeCollapse`, `preserveLineBreaks`
+- `decodeEntities`, `minifyCSS`, `minifyJS`, `minifyURLs`
+- `removeAttributeQuotes`, `removeEmptyElements`, `removeOptionalTags`
+- `removeTagWhitespace`, `sortAttributes`, `sortClassNames`
+- `customAttrCollapse`, `customAttrSurround`, `ignoreCustomFragments`
+- `inlineCustomElements`, `maxLineLength`, `processConditionalComments`
+
+## Testing Policy
+
+All tests must come directly from html-minifier-next's `tests/html.spec.js` — both input HTML and expected output. Do not create custom or made-up tests. Every test function must include a comment referencing the html-minifier-next line numbers it was ported from. When porting tests, run the input through html-minifier-next with Bonsai's full option set to get the authoritative expected output.

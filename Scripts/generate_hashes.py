@@ -84,10 +84,27 @@ TAG_DEFAULTS = {
     "video": {"preload": "auto"},
 }
 
+INLINE_KEEP_WS_ALWAYS = ["img", "input", "wbr"]
+
+INLINE_KEEP_WS_AROUND = [
+    "a", "abbr", "acronym", "b", "bdi", "bdo", "big", "button", "cite", "code",
+    "del", "dfn", "em", "font", "i", "img", "input", "ins", "kbd", "label",
+    "mark", "math", "meter", "nobr", "object", "output", "progress", "q",
+    "rb", "rp", "rt", "rtc", "ruby", "s", "samp", "select", "small", "span",
+    "strike", "strong", "sub", "sup", "svg", "textarea", "time", "tt", "u",
+    "var", "wbr",
+]
+
+INLINE_KEEP_WS_WITHIN = [
+    "a", "abbr", "acronym", "b", "big", "del", "em", "font", "i", "ins",
+    "kbd", "mark", "nobr", "s", "samp", "small", "span", "strike", "strong",
+    "sub", "sup", "time", "tt", "u", "var",
+]
+
 NAMED_HASHES = [
     "script", "style", "link", "a", "svg", "math",
     "type", "language", "charset", "src", "name", "id",
-    "draggable", "value",
+    "draggable", "value", "nobr", "wbr",
 ]
 
 
@@ -110,6 +127,9 @@ def main():
     print_set("booleanAttributeHashes", BOOLEAN_ATTRIBUTES)
     print_set("emptyCollapsibleAttributeHashes", EMPTY_COLLAPSIBLE_ATTRIBUTES)
     print_set("emptyRemovableAttributeHashes", EMPTY_REMOVABLE_ATTRIBUTES)
+    print_set("inlineKeepWSAlwaysHashes", INLINE_KEEP_WS_ALWAYS)
+    print_set("inlineKeepWSAroundHashes", INLINE_KEEP_WS_AROUND)
+    print_set("inlineKeepWSWithinHashes", INLINE_KEEP_WS_WITHIN)
 
     print("\n// Named hashes")
     for name in NAMED_HASHES:
@@ -143,6 +163,9 @@ def main():
         ("bool", BOOLEAN_ATTRIBUTES, False),
         ("ec", EMPTY_COLLAPSIBLE_ATTRIBUTES, False),
         ("er", EMPTY_REMOVABLE_ATTRIBUTES, False),
+        ("iws_always", INLINE_KEEP_WS_ALWAYS, False),
+        ("iws_around", INLINE_KEEP_WS_AROUND, False),
+        ("iws_within", INLINE_KEEP_WS_WITHIN, False),
     ]
     found_collision = False
     for set_name, items, case_sensitive in all_sets:

@@ -1,9 +1,9 @@
 public enum Bonsai {
-  /// Minify an HTML string using conservative settings that match
-  /// html-minifier-next's conservative preset.
+  /// Minify an HTML string.
   ///
-  /// - Collapses whitespace runs to a single space (conservativeCollapse)
-  /// - Preserves line breaks at text node boundaries (preserveLineBreaks)
+  /// - Collapses whitespace intelligently (block vs inline aware)
+  /// - Removes whitespace between block elements
+  /// - Preserves whitespace between inline elements
   /// - Removes comments (keeps bang comments and conditional comments)
   /// - Processes conditional comment content (recursively minifies)
   /// - Collapses boolean attributes (preserving original case)
@@ -33,13 +33,30 @@ public enum Bonsai {
     var attrs = [RawAttr]()
     attrs.reserveCapacity(16)
 
+    // Tag context for smart whitespace collapsing
+    var prevTagHash: UInt64 = 0
+    var prevTagIsClosing = false
+    // Track position in output before the last emitted tag (for wbr/nobr walk-back)
+    var outputPosBeforeLastTag = 0
+    // Whether the last emitted comment was kept (for prevTag=comment handling)
+    var prevWasKeptComment = false
+    // Track text accumulation state for inline dedup (mirrors html-minifier-next's currentChars)
+    var charsEndState: CharsEndState = .empty
+    // Track whether current element has emitted any text (for empty inline detection)
+    var hasChars = false
+
     var i = 0
 
     while i < end {
       if bytes[i] == 0x3C { // <
         let afterLT = i + 1
         if afterLT >= end {
-          appendConservativeText(bytes, i, end, to: &output)
+          let next = peekNextTagHash(bytes, end, i)
+          appendSmartText(bytes, i, end,
+                          prevTag: prevTagHash, prevTagIsClosing: prevTagIsClosing,
+                          nextTag: next?.hash ?? 0, nextTagIsClosing: next?.isClosing ?? false,
+                          prevWasKeptComment: prevWasKeptComment,
+                          charsEndState: &charsEndState, hasChars: &hasChars, to: &output)
           break
         }
 
@@ -49,7 +66,13 @@ public enum Bonsai {
           && bytes[afterLT + 1] == 0x2D
           && bytes[afterLT + 2] == 0x2D
         {
+          let outputBefore = output.count
           i = handleComment(bytes, end, i, &output)
+          // If comment was kept, treat as inline for whitespace purposes
+          prevWasKeptComment = output.count > outputBefore
+          if !prevWasKeptComment {
+            // Comment was removed — prevTag stays unchanged
+          }
           continue
         }
 
@@ -65,9 +88,15 @@ public enum Bonsai {
               output.append(contentsOf: doctypeBytes)
               i = j + 1
             } else {
-              appendConservativeText(bytes, i, end, to: &output)
+              let next = peekNextTagHash(bytes, end, i)
+              appendSmartText(bytes, i, end,
+                              prevTag: prevTagHash, prevTagIsClosing: prevTagIsClosing,
+                              nextTag: next?.hash ?? 0, nextTagIsClosing: next?.isClosing ?? false,
+                              prevWasKeptComment: prevWasKeptComment,
+                              charsEndState: &charsEndState, hasChars: &hasChars, to: &output)
               i = end
             }
+            prevWasKeptComment = false
             continue
           }
         }
@@ -90,7 +119,12 @@ public enum Bonsai {
             } else if rawContentDepth > 0 {
               appendRawContentText(bytes, contentStart, pos, to: &output)
             } else {
-              appendConservativeText(bytes, contentStart, pos, to: &output)
+              let next = peekNextTagHash(bytes, end, pos + 3)
+              appendSmartText(bytes, contentStart, pos,
+                              prevTag: prevTagHash, prevTagIsClosing: prevTagIsClosing,
+                              nextTag: next?.hash ?? 0, nextTagIsClosing: next?.isClosing ?? false,
+                              prevWasKeptComment: prevWasKeptComment,
+                              charsEndState: &charsEndState, hasChars: &hasChars, to: &output)
             }
             i = pos + 3
           } else {
@@ -99,23 +133,85 @@ public enum Bonsai {
             } else if rawContentDepth > 0 {
               appendRawContentText(bytes, contentStart, end, to: &output)
             } else {
-              appendConservativeText(bytes, contentStart, end, to: &output)
+              appendSmartText(bytes, contentStart, end,
+                              prevTag: prevTagHash, prevTagIsClosing: prevTagIsClosing,
+                              nextTag: 0, nextTagIsClosing: false,
+                              prevWasKeptComment: prevWasKeptComment,
+                              charsEndState: &charsEndState, hasChars: &hasChars, to: &output)
             }
             i = end
           }
+          prevWasKeptComment = false
           continue
         }
 
         // End tag: </...>
         if bytes[afterLT] == 0x2F {
+          outputPosBeforeLastTag = output.count
           i = handleEndTag(bytes, end, i, &output, &preserveDepth, &rawContentDepth, &foreignContentDepth)
+          // Extract tag hash from the end tag we just processed
+          let ntStart = afterLT + 1
+          var ntEnd = ntStart
+          while ntEnd < end, !isWSByte(bytes[ntEnd]), bytes[ntEnd] != 0x3E {
+            ntEnd += 1
+          }
+          if ntEnd > ntStart {
+            prevTagHash = fnvHashLowered(bytes, ntStart, ntEnd)
+            prevTagIsClosing = true
+            // Update charsEndState: block tags reset to .empty, empty inline elements → .other
+            if !inlineKeepWSAroundHashes.contains(prevTagHash) {
+              charsEndState = .empty
+            } else if !hasChars {
+              // Empty inline element (e.g., <i></i>) → .other
+              charsEndState = .other
+            }
+          }
+          prevWasKeptComment = false
           continue
         }
 
         // Start tag: letter or _
         if isASCIILetter(bytes[afterLT]) || bytes[afterLT] == 0x5F {
+          // Squash trailing WS from previously-emitted text (retroactive trimming)
+          if preserveDepth == 0, rawContentDepth == 0 {
+            // Peek the tag name to pass to squashTrailingWS
+            var peekEnd = afterLT
+            while peekEnd < end,
+                  !isWSByte(bytes[peekEnd]),
+                  bytes[peekEnd] != 0x2F,
+                  bytes[peekEnd] != 0x3E
+            {
+              peekEnd += 1
+            }
+            if peekEnd > afterLT {
+              let peekHash = fnvHashLowered(bytes, afterLT, peekEnd)
+              squashTrailingWS(&output, nextTag: peekHash, nextTagIsClosing: false)
+            }
+          }
+          outputPosBeforeLastTag = output.count
           i = handleStartTag(bytes, end, i, &output, &attrs,
                              &preserveDepth, &rawContentDepth, &foreignContentDepth)
+          // Extract tag hash from the start tag we just processed
+          let ntStart = afterLT
+          var ntEnd = ntStart
+          while ntEnd < end,
+                !isWSByte(bytes[ntEnd]),
+                bytes[ntEnd] != 0x2F,
+                bytes[ntEnd] != 0x3E
+          {
+            ntEnd += 1
+          }
+          if ntEnd > ntStart {
+            prevTagHash = fnvHashLowered(bytes, ntStart, ntEnd)
+            prevTagIsClosing = false
+            // Update charsEndState: non-inline start tags reset to .empty
+            if !inlineKeepWSWithinHashes.contains(prevTagHash) {
+              charsEndState = .empty
+            }
+            // Reset hasChars for empty inline element detection
+            hasChars = false
+          }
+          prevWasKeptComment = false
           continue
         }
 
@@ -125,8 +221,14 @@ public enum Bonsai {
         } else if rawContentDepth > 0 {
           appendRawContentText(bytes, i, afterLT, to: &output)
         } else {
-          appendConservativeText(bytes, i, afterLT, to: &output)
+          let next = peekNextTagHash(bytes, end, afterLT)
+          appendSmartText(bytes, i, afterLT,
+                          prevTag: prevTagHash, prevTagIsClosing: prevTagIsClosing,
+                          nextTag: next?.hash ?? 0, nextTagIsClosing: next?.isClosing ?? false,
+                          prevWasKeptComment: prevWasKeptComment,
+                          charsEndState: &charsEndState, hasChars: &hasChars, to: &output)
         }
+        prevWasKeptComment = false
         i = afterLT
       } else {
         // Accumulate text until next <
@@ -140,13 +242,48 @@ public enum Bonsai {
         } else if rawContentDepth > 0 {
           appendRawContentText(bytes, start, i, to: &output)
         } else {
-          appendConservativeText(bytes, start, i, to: &output)
+          let next = i < end ? peekNextTagHash(bytes, end, i) : nil
+          // wbr/nobr walk-back: if prevTag is wbr or /nobr and text starts with WS,
+          // trim trailing WS from output before the tag
+          if start < i, isWSByte(bytes[start]) {
+            if (prevTagHash == wbrHash && !prevTagIsClosing)
+              || (prevTagHash == nobrHash && prevTagIsClosing)
+            {
+              let beforeTrim = output.count
+              trimTrailingWSBeforeTag(&output, outputPosBeforeLastTag)
+              // If whitespace was removed, update charsEndState so inline dedup
+              // doesn't incorrectly trim the next text's leading space
+              if output.count < beforeTrim {
+                charsEndState = .other
+              }
+            }
+          }
+          appendSmartText(bytes, start, i,
+                          prevTag: prevTagHash, prevTagIsClosing: prevTagIsClosing,
+                          nextTag: next?.hash ?? 0, nextTagIsClosing: next?.isClosing ?? false,
+                          prevWasKeptComment: prevWasKeptComment,
+                          charsEndState: &charsEndState, hasChars: &hasChars, to: &output)
         }
+        prevWasKeptComment = false
       }
     }
 
+    // Document-end squash: retroactively trim trailing WS (equivalent to html-minifier-next's
+    // synthetic 'br' tag at line 1612, which triggers trimRight=true)
+    squashTrailingWS(&output, nextTag: 0, nextTagIsClosing: false)
+
     return String(decoding: output, as: UTF8.self)
   }
+}
+
+// MARK: - CharsEndState
+
+/// Tracks text accumulation state for inline whitespace deduplication.
+/// Mirrors html-minifier-next's `currentChars` behavior.
+private enum CharsEndState {
+  case empty // No text since block boundary (matches regex /^$/)
+  case endsWithWS // Last text ended with whitespace
+  case other // Last text ended with non-WS or empty inline element seen
 }
 
 // MARK: - RawAttr
@@ -213,7 +350,6 @@ private func bytesMatchLowered(_ bytes: UnsafeBufferPointer<UInt8>, _ start: Int
   return true
 }
 
-
 /// Exact (case-sensitive) byte comparison.
 @inline(__always)
 private func bytesMatchExact(_ bytes: UnsafeBufferPointer<UInt8>, _ start: Int, _ end: Int, _ target: [UInt8]) -> Bool {
@@ -252,6 +388,130 @@ private func isAllWhitespaceByte(_ bytes: UnsafeBufferPointer<UInt8>, _ start: I
     if !isWSByte(bytes[i]) { return false }
   }
   return true
+}
+
+/// Peek at the next tag starting at position `pos` (which should point at `<`).
+/// Returns the lowered hash of the tag name and whether it's a closing tag.
+private func peekNextTagHash(
+  _ bytes: UnsafeBufferPointer<UInt8>, _ end: Int, _ pos: Int
+) -> (hash: UInt64, isClosing: Bool)? {
+  guard pos < end, bytes[pos] == 0x3C else { return nil }
+  let afterLT = pos + 1
+  guard afterLT < end else { return nil }
+
+  // Closing tag: </tagname
+  if bytes[afterLT] == 0x2F {
+    let nameStart = afterLT + 1
+    guard nameStart < end else { return nil }
+    var nameEnd = nameStart
+    while nameEnd < end, !isWSByte(bytes[nameEnd]), bytes[nameEnd] != 0x3E {
+      nameEnd += 1
+    }
+    guard nameEnd > nameStart else { return nil }
+    return (fnvHashLowered(bytes, nameStart, nameEnd), true)
+  }
+
+  // Opening tag: <tagname
+  if isASCIILetter(bytes[afterLT]) || bytes[afterLT] == 0x5F {
+    var nameEnd = afterLT
+    while nameEnd < end,
+          !isWSByte(bytes[nameEnd]),
+          bytes[nameEnd] != 0x2F,
+          bytes[nameEnd] != 0x3E
+    {
+      nameEnd += 1
+    }
+    guard nameEnd > afterLT else { return nil }
+    return (fnvHashLowered(bytes, afterLT, nameEnd), false)
+  }
+
+  // Comment: <!-- treated as inline for whitespace
+  if afterLT + 2 < end,
+     bytes[afterLT] == 0x21,
+     bytes[afterLT + 1] == 0x2D,
+     bytes[afterLT + 2] == 0x2D
+  {
+    return nil // Comments don't affect trim decisions from the next side
+  }
+
+  return nil
+}
+
+/// Walk back in the output buffer from `tagStart` and trim trailing ASCII whitespace.
+/// Used for wbr/nobr deduplication: when text after <wbr> or </nobr> starts with
+/// whitespace, trim trailing whitespace from before the tag in the output.
+private func trimTrailingWSBeforeTag(_ output: inout [UInt8], _ tagStart: Int) {
+  var pos = tagStart
+  while pos > 0, isWSByte(output[pos - 1]) {
+    pos -= 1
+  }
+  if pos < tagStart {
+    output.removeSubrange(pos ..< tagStart)
+  }
+}
+
+/// Retroactively trim trailing whitespace from the output buffer.
+/// Walks backward through output, skipping closing tags (but stopping at </pre> or </textarea>).
+/// When it finds text content, trims trailing ASCII whitespace if `nextTag` triggers trimRight.
+/// Only whitespace bytes are removed — closing tags are preserved.
+/// Mirrors html-minifier-next's `squashTrailingWhitespace` (lines 1071-1080).
+private func squashTrailingWS(
+  _ output: inout [UInt8],
+  nextTag: UInt64, nextTagIsClosing: Bool
+) {
+  // Compute trimRight for this nextTag
+  var trimRight = false
+  if nextTag == 0 {
+    trimRight = true
+  } else if !inlineKeepWSAlwaysHashes.contains(nextTag) {
+    if nextTagIsClosing {
+      trimRight = !inlineKeepWSWithinHashes.contains(nextTag)
+    } else {
+      trimRight = !inlineKeepWSAroundHashes.contains(nextTag)
+    }
+  }
+  guard trimRight else { return }
+
+  // Walk backward to find where text content ends (before any trailing closing tags)
+  var textEnd = output.count
+  var pos = output.count - 1
+  while pos >= 0 {
+    if output[pos] == 0x3E { // '>'
+      // Find matching '<'
+      var tagStart = pos - 1
+      while tagStart >= 0, output[tagStart] != 0x3C {
+        tagStart -= 1
+      }
+      if tagStart >= 0, tagStart + 1 < pos, output[tagStart + 1] == 0x2F {
+        // It's a closing tag — check if it's pre/textarea (can't trim through those)
+        let nameStart = tagStart + 2
+        let nameEnd = pos
+        var h: UInt64 = 14_695_981_039_346_656_037
+        for k in nameStart ..< nameEnd {
+          h ^= UInt64(output[k])
+          h &*= 1_099_511_628_211
+        }
+        if preserveWhitespaceHashes.contains(h) {
+          return // Can't trim through pre/textarea
+        }
+        // Skip past this closing tag — record where tags begin
+        textEnd = tagStart
+        pos = tagStart - 1
+        continue
+      }
+      return // Start tag or other — stop, don't trim
+    }
+    break // Not a tag byte — found text content
+  }
+
+  // Trim trailing whitespace bytes before the closing tags
+  var wsStart = textEnd
+  while wsStart > 0, isWSByte(output[wsStart - 1]) {
+    wsStart -= 1
+  }
+  if wsStart < textEnd {
+    output.removeSubrange(wsStart ..< textEnd)
+  }
 }
 
 /// Find `needle` bytes in `bytes[from ..< end]`.
@@ -441,7 +701,7 @@ private func handleEndTag(
     closeAngle += 1
   }
   guard closeAngle < end else {
-    appendConservativeText(bytes, start, end, to: &output)
+    appendCollapsedText(bytes, start, end, to: &output)
     return end
   }
 
@@ -488,7 +748,7 @@ private func handleStartTag(
   let nameStart = start + 1
 
   guard let closeAngle = findTagEnd(bytes, end, from: nameStart) else {
-    appendConservativeText(bytes, start, end, to: &output)
+    appendCollapsedText(bytes, start, end, to: &output)
     return end
   }
 
@@ -695,7 +955,7 @@ private func parseRawContent(
             if rawContentDepth > 0 {
               appendRawContentText(bytes, from, i, to: &output)
             } else {
-              appendConservativeText(bytes, from, i, to: &output)
+              appendCollapsedText(bytes, from, i, to: &output)
             }
           }
           // Find closing >
@@ -730,7 +990,7 @@ private func parseRawContent(
     if rawContentDepth > 0 {
       appendRawContentText(bytes, from, i, to: &output)
     } else {
-      appendConservativeText(bytes, from, i, to: &output)
+      appendCollapsedText(bytes, from, i, to: &output)
     }
   }
   return end
@@ -767,106 +1027,131 @@ private func bytesEqualLowered(_ bytes: UnsafeBufferPointer<UInt8>, _ s1: Int, _
 
 // MARK: - Text processing (byte-level)
 
-/// Append text with conservative whitespace collapsing and preserveLineBreaks.
+/// Append text with smart whitespace collapsing based on surrounding tag context.
 ///
-/// preserveLineBreaks: newlines are only preserved at the START and END of text
-/// nodes (adjacent to tags). Internal newlines collapse to space.
+/// Uses inline/block element classification to decide whether to trim whitespace:
+/// - Between block elements: whitespace removed entirely
+/// - Between inline elements: whitespace collapsed to single space
+/// - Inside block elements: leading/trailing whitespace trimmed
 ///
-/// Algorithm:
-/// 1. Extract leading whitespace: if contains newline → save `\n`, strip
-/// 2. Extract trailing whitespace: if contains newline → save `\n`, strip
-/// 3. Remaining leading whitespace (no newline) → collapse to ` `
-/// 4. Remaining trailing whitespace (no newline) → collapse to ` `
-/// 5. Collapse all internal whitespace runs to single space
-/// 6. Prepend/append saved newlines
-private func appendConservativeText(_ bytes: UnsafeBufferPointer<UInt8>, _ start: Int, _ end: Int, to output: inout [UInt8]) {
+/// Also handles inline deduplication: when the previous tag is an inline text
+/// element and the output already ends with whitespace, leading whitespace is
+/// trimmed to prevent double-spacing across tag boundaries.
+private func appendSmartText(
+  _ bytes: UnsafeBufferPointer<UInt8>, _ start: Int, _ end: Int,
+  prevTag: UInt64, prevTagIsClosing: Bool,
+  nextTag: UInt64, nextTagIsClosing: Bool,
+  prevWasKeptComment: Bool,
+  charsEndState: inout CharsEndState,
+  hasChars: inout Bool,
+  to output: inout [UInt8]
+) {
   guard start < end else { return }
 
-  // Find leading whitespace end
-  var leadEnd = start
-  while leadEnd < end, isWSByte(bytes[leadEnd]) {
-    leadEnd += 1
-  }
-
-  // Find trailing whitespace start
-  var trailStart = end
-  while trailStart > start, isWSByte(bytes[trailStart - 1]) {
-    trailStart -= 1
-  }
-
-  var lineBreakBefore = false
-  var lineBreakAfter = false
-  var contentStart = start
-  var contentEnd = end
-
-  // Step 1: Leading WS with newline → save newline, strip
-  if leadEnd > start, containsNewlineInBytes(bytes, start, leadEnd) {
-    lineBreakBefore = true
-    contentStart = leadEnd
-  }
-
-  // Step 2: Trailing WS with newline → save newline, strip
-  if trailStart < end, trailStart > contentStart,
-     containsNewlineInBytes(bytes, trailStart, end)
-  {
-    lineBreakAfter = true
-    contentEnd = trailStart
-  }
-
-  // Step 3: Collapse remaining leading WS to single space
-  var innerStart = contentStart
-  var prependSpace = false
-  if !lineBreakBefore {
-    var ws = innerStart
-    while ws < contentEnd, isWSByte(bytes[ws]) {
-      ws += 1
-    }
-    if ws > innerStart {
-      prependSpace = true
-      innerStart = ws
-    }
-  }
-
-  // Step 4: Collapse remaining trailing WS to single space
-  var innerEnd = contentEnd
-  var appendSpace = false
-  if !lineBreakAfter {
-    var ws = innerEnd
-    while ws > innerStart, isWSByte(bytes[ws - 1]) {
-      ws -= 1
-    }
-    if ws < innerEnd {
-      appendSpace = true
-      innerEnd = ws
-    }
-  }
-
-  // Steps 5+6: Collapse internal WS and assemble
-  if innerStart >= innerEnd {
-    // Content is empty after stripping
-    if lineBreakBefore {
-      output.append(0x0A)
-    } else if lineBreakAfter {
-      output.append(0x0A)
+  // Compute trimLeft
+  var trimLeft: Bool
+  if prevWasKeptComment {
+    // Kept comments act like inlineKeepWSAlways — never trim
+    trimLeft = false
+  } else if prevTag == 0 {
+    trimLeft = true // No previous tag — trim (top of document)
+  } else if inlineKeepWSAlwaysHashes.contains(prevTag) {
+    trimLeft = false
+  } else {
+    if prevTagIsClosing {
+      trimLeft = !inlineKeepWSAroundHashes.contains(prevTag)
     } else {
-      // Whitespace-only with no newlines → conservativeCollapse → single space
-      var allWS = true
-      for i in start ..< end {
-        if !isWSByte(bytes[i]) { allWS = false; break }
+      trimLeft = !inlineKeepWSWithinHashes.contains(prevTag)
+    }
+  }
+
+  // Compute trimRight
+  var trimRight: Bool
+  if nextTag == 0 {
+    trimRight = true // No next tag — trim (end of document)
+  } else if inlineKeepWSAlwaysHashes.contains(nextTag) {
+    trimRight = false
+  } else {
+    if nextTagIsClosing {
+      trimRight = !inlineKeepWSWithinHashes.contains(nextTag)
+    } else {
+      trimRight = !inlineKeepWSAroundHashes.contains(nextTag)
+    }
+  }
+
+  // Inline deduplication: mirrors html-minifier-next's /(?:^|\s)$/.test(currentChars)
+  // (line 1382-1384). Trim leading WS when charsEndState is .empty or .endsWithWS.
+  var inlineDedup = false
+  if !trimLeft, prevTag != 0 {
+    let isInlineText = prevWasKeptComment || inlineKeepWSWithinHashes.contains(prevTag)
+    if isInlineText, charsEndState == .empty || charsEndState == .endsWithWS {
+      if start < end, isWSByte(bytes[start]) {
+        inlineDedup = true
       }
-      if allWS { output.append(0x20) }
+    }
+  }
+
+  // Find content boundaries
+  var s = start
+  var e = end
+
+  if trimLeft || inlineDedup {
+    while s < e, isWSByte(bytes[s]) {
+      s += 1
+    }
+  }
+  if trimRight {
+    while e > s, isWSByte(bytes[e - 1]) {
+      e -= 1
+    }
+  }
+
+  if s >= e {
+    // Content is empty after trimming — check if we should emit a single space
+    let shouldEmitSpace = !trimLeft && !trimRight && !inlineDedup
+    if shouldEmitSpace {
+      var hasWS = false
+      for j in start ..< end {
+        if isWSByte(bytes[j]) { hasWS = true; break }
+      }
+      if hasWS {
+        output.append(0x20)
+        charsEndState = .endsWithWS
+        hasChars = true
+      }
     }
   } else {
-    if lineBreakBefore { output.append(0x0A) }
-    if prependSpace { output.append(0x20) }
-    collapseInternalWhitespace(bytes, innerStart, innerEnd, to: &output)
-    if appendSpace { output.append(0x20) }
-    if lineBreakAfter { output.append(0x0A) }
+    collapseInternalWhitespace(bytes, s, e, to: &output)
+    hasChars = true
+    // Track if the emitted text ended with whitespace
+    if !output.isEmpty, isWSByte(output[output.count - 1]) {
+      charsEndState = .endsWithWS
+    } else {
+      charsEndState = .other
+    }
   }
 }
 
-/// Append raw content text (script/style) with only leading/trailing whitespace trimming.
+/// Simple fallback for malformed HTML — just collapse whitespace and trim.
+/// Used in error-recovery paths where tag context is unavailable.
+private func appendCollapsedText(_ bytes: UnsafeBufferPointer<UInt8>, _ start: Int, _ end: Int, to output: inout [UInt8]) {
+  guard start < end else { return }
+  var s = start
+  while s < end, isWSByte(bytes[s]) {
+    s += 1
+  }
+  var e = end
+  while e > s, isWSByte(bytes[e - 1]) {
+    e -= 1
+  }
+  if s < e {
+    collapseInternalWhitespace(bytes, s, e, to: &output)
+  }
+}
+
+/// Append raw content text (script/style) with leading/trailing whitespace stripped entirely.
 /// Internal whitespace is preserved exactly as-is.
+/// Matches html-minifier-next's `trimWhitespace` behavior.
 private func appendRawContentText(_ bytes: UnsafeBufferPointer<UInt8>, _ start: Int, _ end: Int, to output: inout [UInt8]) {
   guard start < end else { return }
 
@@ -876,40 +1161,15 @@ private func appendRawContentText(_ bytes: UnsafeBufferPointer<UInt8>, _ start: 
   }
 
   var trailStart = end
-  while trailStart > start, isWSByte(bytes[trailStart - 1]) {
+  while trailStart > leadEnd, isWSByte(bytes[trailStart - 1]) {
     trailStart -= 1
   }
 
-  // Entirely whitespace
-  if leadEnd >= trailStart {
-    if containsNewlineInBytes(bytes, start, end) {
-      output.append(0x0A)
-    } else {
-      output.append(0x20)
-    }
-    return
-  }
+  // Entirely whitespace — emit nothing
+  if leadEnd >= trailStart { return }
 
-  // Leading whitespace
-  if leadEnd > start {
-    if containsNewlineInBytes(bytes, start, leadEnd) {
-      output.append(0x0A)
-    } else {
-      output.append(0x20)
-    }
-  }
-
-  // Middle content — preserved as-is
+  // Emit middle content only — no leading/trailing WS
   output.append(contentsOf: bytes[leadEnd ..< trailStart])
-
-  // Trailing whitespace
-  if trailStart < end {
-    if containsNewlineInBytes(bytes, trailStart, end) {
-      output.append(0x0A)
-    } else {
-      output.append(0x20)
-    }
-  }
 }
 
 /// Collapse all internal whitespace runs to a single space, appending directly to output.

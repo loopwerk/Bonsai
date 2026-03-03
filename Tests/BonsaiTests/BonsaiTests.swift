@@ -1,111 +1,272 @@
 @testable import Bonsai
 import XCTest
 
-/// Tests ported from html-minifier-next's test suite, run with the conservative preset:
+/// Tests ported from html-minifier-next's test suite, run with:
 /// { caseSensitive: true, collapseBooleanAttributes: true, collapseWhitespace: true,
-///   conservativeCollapse: true, preserveLineBreaks: true, processConditionalComments: true,
 ///   removeComments: true, removeScriptTypeAttributes: true,
 ///   removeStyleLinkTypeAttributes: true, useShortDoctype: true }
 final class BonsaiTests: XCTestCase {
   // ============================================================================
   // MARK: - Space normalization around text
 
-  // html-minifier-next: "Space normalization around text" (lines 209-339)
+  // html-minifier-next: "Space normalization around text" (lines 209-376)
   // ============================================================================
 
   func testSpaceNormLeadingTrailingNewlines() {
-    // Line 220: conservativeCollapse + preserveLineBreaks
+    // Line 214: collapseWhitespace: true
     XCTAssertEqual(
       Bonsai.minifyHTML("   <p>blah</p>\n\n\n   "),
-      " <p>blah</p>\n"
+      "<p>blah</p>"
     )
   }
 
   func testInlineElementsPreserveSpaces() {
-    // Lines 225-233: with conservativeCollapse, input preserved as-is
+    // Lines 226-233: collapseWhitespace: true, 8 variants per element
     let inlines = [
       "a", "abbr", "acronym", "b", "big", "del", "em", "font", "i", "ins", "kbd",
       "mark", "s", "samp", "small", "span", "strike", "strong", "sub", "sup",
       "time", "tt", "u", "var",
     ]
     for el in inlines {
+      // Line 226: foo <el>baz</el> bar -> foo <el>baz</el> bar
       XCTAssertEqual(
         Bonsai.minifyHTML("foo <\(el)>baz</\(el)> bar"),
         "foo <\(el)>baz</\(el)> bar",
         "\(el): spaces around"
       )
+      // Line 227: foo<el>baz</el>bar -> foo<el>baz</el>bar
       XCTAssertEqual(
         Bonsai.minifyHTML("foo<\(el)>baz</\(el)>bar"),
         "foo<\(el)>baz</\(el)>bar",
         "\(el): no spaces"
       )
+      // Line 228: foo <el>baz</el>bar -> foo <el>baz</el>bar
       XCTAssertEqual(
         Bonsai.minifyHTML("foo <\(el)>baz</\(el)>bar"),
         "foo <\(el)>baz</\(el)>bar",
         "\(el): leading space"
       )
+      // Line 229: foo<el>baz</el> bar -> foo<el>baz</el> bar
       XCTAssertEqual(
         Bonsai.minifyHTML("foo<\(el)>baz</\(el)> bar"),
         "foo<\(el)>baz</\(el)> bar",
         "\(el): trailing space"
       )
+      // Line 230: foo <el> baz </el> bar -> foo <el>baz </el>bar
+      XCTAssertEqual(
+        Bonsai.minifyHTML("foo <\(el)> baz </\(el)> bar"),
+        "foo <\(el)>baz </\(el)>bar",
+        "\(el): inner spaces, spaces around"
+      )
+      // Line 231: foo<el> baz </el>bar -> foo<el> baz </el>bar
+      XCTAssertEqual(
+        Bonsai.minifyHTML("foo<\(el)> baz </\(el)>bar"),
+        "foo<\(el)> baz </\(el)>bar",
+        "\(el): inner spaces, no outer spaces"
+      )
+      // Line 232: foo <el> baz </el>bar -> foo <el>baz </el>bar
+      XCTAssertEqual(
+        Bonsai.minifyHTML("foo <\(el)> baz </\(el)>bar"),
+        "foo <\(el)>baz </\(el)>bar",
+        "\(el): inner spaces, leading outer space"
+      )
+      // Line 233: foo<el> baz </el> bar -> foo<el> baz </el>bar
+      XCTAssertEqual(
+        Bonsai.minifyHTML("foo<\(el)> baz </\(el)> bar"),
+        "foo<\(el)> baz </\(el)>bar",
+        "\(el): inner spaces, trailing outer space"
+      )
     }
   }
 
   func testInlineElementsInsideDiv() {
-    // Lines 234-241: inside <div>, conservativeCollapse preserves spaces
+    // Lines 234-241: inside <div>, collapseWhitespace: true, 8 variants per element
     let inlines = [
       "a", "abbr", "acronym", "b", "big", "del", "em", "font", "i", "ins", "kbd",
       "mark", "s", "samp", "small", "span", "strike", "strong", "sub", "sup",
       "time", "tt", "u", "var",
     ]
     for el in inlines {
+      // Line 234
       XCTAssertEqual(
         Bonsai.minifyHTML("<div>foo <\(el)>baz</\(el)> bar</div>"),
         "<div>foo <\(el)>baz</\(el)> bar</div>",
         "\(el) in div: spaces"
       )
+      // Line 235
       XCTAssertEqual(
         Bonsai.minifyHTML("<div>foo<\(el)>baz</\(el)>bar</div>"),
         "<div>foo<\(el)>baz</\(el)>bar</div>",
         "\(el) in div: no spaces"
       )
+      // Line 236
       XCTAssertEqual(
         Bonsai.minifyHTML("<div>foo <\(el)>baz</\(el)>bar</div>"),
         "<div>foo <\(el)>baz</\(el)>bar</div>",
         "\(el) in div: leading space"
       )
+      // Line 237
       XCTAssertEqual(
         Bonsai.minifyHTML("<div>foo<\(el)>baz</\(el)> bar</div>"),
         "<div>foo<\(el)>baz</\(el)> bar</div>",
         "\(el) in div: trailing space"
       )
+      // Line 238
+      XCTAssertEqual(
+        Bonsai.minifyHTML("<div>foo <\(el)> baz </\(el)> bar</div>"),
+        "<div>foo <\(el)>baz </\(el)>bar</div>",
+        "\(el) in div: inner spaces, spaces around"
+      )
+      // Line 239
+      XCTAssertEqual(
+        Bonsai.minifyHTML("<div>foo<\(el)> baz </\(el)>bar</div>"),
+        "<div>foo<\(el)> baz </\(el)>bar</div>",
+        "\(el) in div: inner spaces, no outer spaces"
+      )
+      // Line 240
+      XCTAssertEqual(
+        Bonsai.minifyHTML("<div>foo <\(el)> baz </\(el)>bar</div>"),
+        "<div>foo <\(el)>baz </\(el)>bar</div>",
+        "\(el) in div: inner spaces, leading outer space"
+      )
+      // Line 241
+      XCTAssertEqual(
+        Bonsai.minifyHTML("<div>foo<\(el)> baz </\(el)> bar</div>"),
+        "<div>foo<\(el)> baz </\(el)>bar</div>",
+        "\(el) in div: inner spaces, trailing outer space"
+      )
+    }
+  }
+
+  func testNonTrimmingInlineElements() {
+    // Lines 244-263: bdi, bdo, button, cite, code, dfn, math, q, rt, rtc, ruby, svg
+    // These preserve whitespace around but trim within
+    let elements = [
+      "bdi", "bdo", "button", "cite", "code", "dfn", "math", "q", "rt", "rtc", "ruby", "svg",
+    ]
+    for el in elements {
+      // Line 247
+      XCTAssertEqual(
+        Bonsai.minifyHTML("foo <\(el)>baz</\(el)> bar"),
+        "foo <\(el)>baz</\(el)> bar",
+        "\(el): spaces around"
+      )
+      // Line 248
+      XCTAssertEqual(
+        Bonsai.minifyHTML("foo<\(el)>baz</\(el)>bar"),
+        "foo<\(el)>baz</\(el)>bar",
+        "\(el): no spaces"
+      )
+      // Line 249
+      XCTAssertEqual(
+        Bonsai.minifyHTML("foo <\(el)>baz</\(el)>bar"),
+        "foo <\(el)>baz</\(el)>bar",
+        "\(el): leading space"
+      )
+      // Line 250
+      XCTAssertEqual(
+        Bonsai.minifyHTML("foo<\(el)>baz</\(el)> bar"),
+        "foo<\(el)>baz</\(el)> bar",
+        "\(el): trailing space"
+      )
+      // Line 251
+      XCTAssertEqual(
+        Bonsai.minifyHTML("foo <\(el)> baz </\(el)> bar"),
+        "foo <\(el)>baz</\(el)> bar",
+        "\(el): inner spaces, spaces around"
+      )
+      // Line 252
+      XCTAssertEqual(
+        Bonsai.minifyHTML("foo<\(el)> baz </\(el)>bar"),
+        "foo<\(el)>baz</\(el)>bar",
+        "\(el): inner spaces, no outer spaces"
+      )
+      // Line 253
+      XCTAssertEqual(
+        Bonsai.minifyHTML("foo <\(el)> baz </\(el)>bar"),
+        "foo <\(el)>baz</\(el)>bar",
+        "\(el): inner spaces, leading outer space"
+      )
+      // Line 254
+      XCTAssertEqual(
+        Bonsai.minifyHTML("foo<\(el)> baz </\(el)> bar"),
+        "foo<\(el)>baz</\(el)> bar",
+        "\(el): inner spaces, trailing outer space"
+      )
+      // Line 255
+      XCTAssertEqual(
+        Bonsai.minifyHTML("<div>foo <\(el)>baz</\(el)> bar</div>"),
+        "<div>foo <\(el)>baz</\(el)> bar</div>",
+        "\(el) in div: spaces"
+      )
+      // Line 256
+      XCTAssertEqual(
+        Bonsai.minifyHTML("<div>foo<\(el)>baz</\(el)>bar</div>"),
+        "<div>foo<\(el)>baz</\(el)>bar</div>",
+        "\(el) in div: no spaces"
+      )
+      // Line 257
+      XCTAssertEqual(
+        Bonsai.minifyHTML("<div>foo <\(el)>baz</\(el)>bar</div>"),
+        "<div>foo <\(el)>baz</\(el)>bar</div>",
+        "\(el) in div: leading space"
+      )
+      // Line 258
+      XCTAssertEqual(
+        Bonsai.minifyHTML("<div>foo<\(el)>baz</\(el)> bar</div>"),
+        "<div>foo<\(el)>baz</\(el)> bar</div>",
+        "\(el) in div: trailing space"
+      )
+      // Line 259
+      XCTAssertEqual(
+        Bonsai.minifyHTML("<div>foo <\(el)> baz </\(el)> bar</div>"),
+        "<div>foo <\(el)>baz</\(el)> bar</div>",
+        "\(el) in div: inner spaces, spaces around"
+      )
+      // Line 260
+      XCTAssertEqual(
+        Bonsai.minifyHTML("<div>foo<\(el)> baz </\(el)>bar</div>"),
+        "<div>foo<\(el)>baz</\(el)>bar</div>",
+        "\(el) in div: inner spaces, no outer spaces"
+      )
+      // Line 261
+      XCTAssertEqual(
+        Bonsai.minifyHTML("<div>foo <\(el)> baz </\(el)>bar</div>"),
+        "<div>foo <\(el)>baz</\(el)>bar</div>",
+        "\(el) in div: inner spaces, leading outer space"
+      )
+      // Line 262
+      XCTAssertEqual(
+        Bonsai.minifyHTML("<div>foo<\(el)> baz </\(el)> bar</div>"),
+        "<div>foo<\(el)>baz</\(el)> bar</div>",
+        "\(el) in div: inner spaces, trailing outer space"
+      )
     }
   }
 
   func testNobrSpacePermutations() {
-    // Lines 265-296: conservativeCollapse preserves all nobr inputs as-is
+    // Lines 264-296: nobr space permutations with collapseWhitespace: true
     let cases: [(String, String)] = [
       ("<nobr>a</nobr>", "<nobr>a</nobr>"),
-      ("<nobr>a </nobr>", "<nobr>a </nobr>"),
-      ("<nobr> a</nobr>", "<nobr> a</nobr>"),
-      ("<nobr> a </nobr>", "<nobr> a </nobr>"),
+      ("<nobr>a </nobr>", "<nobr>a</nobr>"),
+      ("<nobr> a</nobr>", "<nobr>a</nobr>"),
+      ("<nobr> a </nobr>", "<nobr>a</nobr>"),
       ("a<nobr>b</nobr>c", "a<nobr>b</nobr>c"),
       ("a<nobr>b </nobr>c", "a<nobr>b </nobr>c"),
       ("a<nobr> b</nobr>c", "a<nobr> b</nobr>c"),
       ("a<nobr> b </nobr>c", "a<nobr> b </nobr>c"),
       ("a<nobr>b</nobr> c", "a<nobr>b</nobr> c"),
-      ("a<nobr>b </nobr> c", "a<nobr>b </nobr> c"),
+      ("a<nobr>b </nobr> c", "a<nobr>b</nobr> c"),
       ("a<nobr> b</nobr> c", "a<nobr> b</nobr> c"),
-      ("a<nobr> b </nobr> c", "a<nobr> b </nobr> c"),
+      ("a<nobr> b </nobr> c", "a<nobr> b</nobr> c"),
       ("a <nobr>b</nobr>c", "a <nobr>b</nobr>c"),
       ("a <nobr>b </nobr>c", "a <nobr>b </nobr>c"),
-      ("a <nobr> b</nobr>c", "a <nobr> b</nobr>c"),
-      ("a <nobr> b </nobr>c", "a <nobr> b </nobr>c"),
+      ("a <nobr> b</nobr>c", "a <nobr>b</nobr>c"),
+      ("a <nobr> b </nobr>c", "a <nobr>b </nobr>c"),
       ("a <nobr>b</nobr> c", "a <nobr>b</nobr> c"),
-      ("a <nobr>b </nobr> c", "a <nobr>b </nobr> c"),
-      ("a <nobr> b</nobr> c", "a <nobr> b</nobr> c"),
-      ("a <nobr> b </nobr> c", "a <nobr> b </nobr> c"),
+      ("a <nobr>b </nobr> c", "a <nobr>b</nobr> c"),
+      ("a <nobr> b</nobr> c", "a <nobr>b</nobr> c"),
+      ("a <nobr> b </nobr> c", "a <nobr>b</nobr> c"),
     ]
     for (input, expected) in cases {
       XCTAssertEqual(Bonsai.minifyHTML(input), expected, input)
@@ -128,19 +289,153 @@ final class BonsaiTests: XCTestCase {
     XCTAssertEqual(Bonsai.minifyHTML("<p>foo<img> bar</p>"), "<p>foo<img> bar</p>")
   }
 
+  func testWbrSpaceHandling() {
+    // Lines 302-309
+    XCTAssertEqual(Bonsai.minifyHTML("<p>foo <wbr> bar</p>"), "<p>foo<wbr> bar</p>")
+    XCTAssertEqual(Bonsai.minifyHTML("<p>foo<wbr>bar</p>"), "<p>foo<wbr>bar</p>")
+    XCTAssertEqual(Bonsai.minifyHTML("<p>foo <wbr>bar</p>"), "<p>foo <wbr>bar</p>")
+    XCTAssertEqual(Bonsai.minifyHTML("<p>foo<wbr> bar</p>"), "<p>foo<wbr> bar</p>")
+    XCTAssertEqual(Bonsai.minifyHTML("<p>foo <wbr baz moo=\"\"> bar</p>"), "<p>foo<wbr baz moo=\"\"> bar</p>")
+    XCTAssertEqual(Bonsai.minifyHTML("<p>foo<wbr baz moo=\"\">bar</p>"), "<p>foo<wbr baz moo=\"\">bar</p>")
+    XCTAssertEqual(Bonsai.minifyHTML("<p>foo <wbr baz moo=\"\">bar</p>"), "<p>foo <wbr baz moo=\"\">bar</p>")
+    XCTAssertEqual(Bonsai.minifyHTML("<p>foo<wbr baz moo=\"\"> bar</p>"), "<p>foo<wbr baz moo=\"\"> bar</p>")
+  }
+
+  func testNestedInlineElements() {
+    // Lines 310-312
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<p>  <a href=\"#\">  <code>foo</code></a> bar</p>"),
+      "<p><a href=\"#\"><code>foo</code></a> bar</p>"
+    )
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<p><a href=\"#\"><code>foo  </code></a> bar</p>"),
+      "<p><a href=\"#\"><code>foo</code></a> bar</p>"
+    )
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<p>  <a href=\"#\">  <code>   foo</code></a> bar   </p>"),
+      "<p><a href=\"#\"><code>foo</code></a> bar</p>"
+    )
+  }
+
+  func testCommentWhitespace() {
+    // Line 313: collapseWhitespace only (no removeComments) — but Bonsai always removes comments
+    // With removeComments, comments are removed, affecting whitespace
+    // Line 314-317: collapseWhitespace + removeComments
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<div> a <input><!-- b --> c </div>"),
+      "<div>a <input> c</div>"
+    )
+  }
+
   func testProcessingInstructionPreserved() {
-    // Lines 318-335: conservativeCollapse + removeComments
-    XCTAssertEqual(Bonsai.minifyHTML(" a <? b ?> c "), " a <? b ?> c ")
-    XCTAssertEqual(Bonsai.minifyHTML("<!-- d --> a <? b ?> c "), " a <? b ?> c ")
-    XCTAssertEqual(Bonsai.minifyHTML("<p> a <? b ?> c </p>"), "<p> a <? b ?> c </p>")
+    // Lines 318-335: with collapseWhitespace + removeComments
+    // Most PI variants produce: 'a<? b ?> c'
+    // But when comment is between ?> and text, the space is lost
+    let piCases: [(String, String)] = [
+      (" a <? b ?> c ", "a<? b ?> c"),
+      ("<!-- d --> a <? b ?> c ", "a<? b ?> c"),
+      (" <!-- d -->a <? b ?> c ", "a<? b ?> c"),
+      (" a<!-- d --> <? b ?> c ", "a<? b ?> c"),
+      (" a <!-- d --><? b ?> c ", "a<? b ?> c"),
+      (" a <? b ?><!-- d --> c ", "a<? b ?>c"),
+      (" a <? b ?> <!-- d -->c ", "a<? b ?>c"),
+      (" a <? b ?> c<!-- d --> ", "a<? b ?> c"),
+      (" a <? b ?> c <!-- d -->", "a<? b ?> c"),
+    ]
+    for (input, expected) in piCases {
+      XCTAssertEqual(Bonsai.minifyHTML(input), expected, input)
+    }
+    // Also inside <p>
+    let piPCases: [(String, String)] = [
+      ("<p> a <? b ?> c </p>", "<p>a<? b ?> c</p>"),
+      ("<p><!-- d --> a <? b ?> c </p>", "<p>a<? b ?> c</p>"),
+      ("<p> <!-- d -->a <? b ?> c </p>", "<p>a<? b ?> c</p>"),
+      ("<p> a<!-- d --> <? b ?> c </p>", "<p>a<? b ?> c</p>"),
+      ("<p> a <!-- d --><? b ?> c </p>", "<p>a<? b ?> c</p>"),
+      ("<p> a <? b ?><!-- d --> c </p>", "<p>a<? b ?>c</p>"),
+      ("<p> a <? b ?> <!-- d -->c </p>", "<p>a<? b ?>c</p>"),
+      ("<p> a <? b ?> c<!-- d --> </p>", "<p>a<? b ?> c</p>"),
+      ("<p> a <? b ?> c <!-- d --></p>", "<p>a<? b ?> c</p>"),
+    ]
+    for (input, expected) in piPCases {
+      XCTAssertEqual(Bonsai.minifyHTML(input), expected, input)
+    }
   }
 
   func testEmptyInlineElementSpaces() {
-    // Line 337-338
+    // Lines 337-347
     XCTAssertEqual(
       Bonsai.minifyHTML("<li><i></i> <b></b> foo</li>"),
       "<li><i></i> <b></b> foo</li>"
     )
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<li><i> </i> <b></b> foo</li>"),
+      "<li><i></i> <b></b> foo</li>"
+    )
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<li> <i></i> <b></b> foo</li>"),
+      "<li><i></i> <b></b> foo</li>"
+    )
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<li><i></i> <b> </b> foo</li>"),
+      "<li><i></i> <b></b> foo</li>"
+    )
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<li> <i> </i> <b> </b> foo</li>"),
+      "<li><i></i> <b></b> foo</li>"
+    )
+  }
+
+  func testNestedInlineDeep() {
+    // Lines 348-350
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<div> <a href=\"#\"> <span> <b> foo </b> <i> bar </i> </span> </a> </div>"),
+      "<div><a href=\"#\"><span><b>foo </b><i>bar</i></span></a></div>"
+    )
+  }
+
+  func testHeadCommentWhitespace() {
+    // Lines 351-356: collapseWhitespace only (no removeComments)
+    // But Bonsai always removes comments, so expected differs
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<head> <!-- a --> <!-- b --><link> </head>"),
+      "<head><link></head>"
+    )
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<head> <!-- a --> <!-- b --> <!-- c --><link> </head>"),
+      "<head><link></head>"
+    )
+  }
+
+  func testNbspInTextCollapse() {
+    // Line 357-359
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<p> foo\u{00A0}bar\nbaz  \u{00A0}\nmoo\t</p>"),
+      "<p>foo\u{00A0}bar baz \u{00A0} moo</p>"
+    )
+  }
+
+  func testLabelInputObjectSelectTextarea() {
+    // Lines 360-366
+    let input = "<label> foo </label>\n" +
+      "<input>\n" +
+      "<object> bar </object>\n" +
+      "<select> baz </select>\n" +
+      "<textarea> moo </textarea>\n"
+    let expected = "<label>foo</label> <input> <object>bar</object> <select>baz</select> <textarea> moo </textarea>"
+    XCTAssertEqual(Bonsai.minifyHTML(input), expected)
+  }
+
+  func testPreWithTrailingText() {
+    // Lines 367-375
+    let input = "<pre>\n" +
+      "foo\n" +
+      "<br>\n" +
+      "bar\n" +
+      "</pre>\n" +
+      "baz\n"
+    let expected = "<pre>\nfoo\n<br>\nbar\n</pre>baz"
+    XCTAssertEqual(Bonsai.minifyHTML(input), expected)
   }
 
   // ============================================================================
@@ -153,7 +448,7 @@ final class BonsaiTests: XCTestCase {
     // Line 1553-1555: script content trimmed, type removed
     XCTAssertEqual(
       Bonsai.minifyHTML("<script type=\"text/javascript\">  \n\t   alert(1) \n\n\n  \t </script>"),
-      "<script>\nalert(1)\n</script>"
+      "<script>alert(1)</script>"
     )
   }
 
@@ -161,13 +456,13 @@ final class BonsaiTests: XCTestCase {
     // Line 1557-1559
     XCTAssertEqual(
       Bonsai.minifyHTML("<p>foo</p>    <p> bar</p>\n\n   \n\t\t  <div title=\"quz\">baz  </div>"),
-      "<p>foo</p> <p> bar</p>\n<div title=\"quz\">baz </div>"
+      "<p>foo</p><p>bar</p><div title=\"quz\">baz</div>"
     )
   }
 
-  func testConservativeCollapseLeadingSpace() {
+  func testCollapseLeadingSpace() {
     // Line 1561-1563
-    XCTAssertEqual(Bonsai.minifyHTML("<p> foo    bar</p>"), "<p> foo bar</p>")
+    XCTAssertEqual(Bonsai.minifyHTML("<p> foo    bar</p>"), "<p>foo bar</p>")
   }
 
   func testCollapseNewlineToSpace() {
@@ -179,7 +474,7 @@ final class BonsaiTests: XCTestCase {
     // Line 1569-1571
     XCTAssertEqual(
       Bonsai.minifyHTML("<p> foo    <span>  blah     <i>   22</i>    </span> bar <img src=\"\"></p>"),
-      "<p> foo <span> blah <i> 22</i> </span> bar <img src=\"\"></p>"
+      "<p>foo <span>blah <i>22</i> </span>bar <img src=\"\"></p>"
     )
   }
 
@@ -195,15 +490,15 @@ final class BonsaiTests: XCTestCase {
     // Line 1577-1579
     XCTAssertEqual(
       Bonsai.minifyHTML("<div><textarea></textarea>    </div>"),
-      "<div><textarea></textarea> </div>"
+      "<div><textarea></textarea></div>"
     )
   }
 
   func testCaseSensitivePreElement() {
-    // Line 1581-1585: caseSensitive means <pRe> is NOT recognized as pre
+    // Line 1584-1585: caseSensitive means <pRe> is NOT recognized as pre
     XCTAssertEqual(
       Bonsai.minifyHTML("<div><pRe> $foo = \"baz\"; </pRe>    </div>"),
-      "<div><pRe> $foo = \"baz\"; </pRe> </div>"
+      "<div><pRe>$foo = \"baz\";</pRe></div>"
     )
   }
 
@@ -227,7 +522,7 @@ final class BonsaiTests: XCTestCase {
     // Lines 1613-1615: script content — only trailing trimmed, internal preserved
     XCTAssertEqual(
       Bonsai.minifyHTML("<script>alert(\"foo     bar\")    </script>"),
-      "<script>alert(\"foo     bar\") </script>"
+      "<script>alert(\"foo     bar\")</script>"
     )
   }
 
@@ -235,17 +530,14 @@ final class BonsaiTests: XCTestCase {
     // Lines 1617-1619
     XCTAssertEqual(
       Bonsai.minifyHTML("<style>alert(\"foo     bar\")    </style>"),
-      "<style>alert(\"foo     bar\") </style>"
+      "<style>alert(\"foo     bar\")</style>"
     )
-  }
-
-  func testBoldContentWithNewlines() {
-    // From space normalization section
-    XCTAssertEqual(Bonsai.minifyHTML("<b>   foo \n\n</b>"), "<b> foo\n</b>")
   }
 
   func testBigDocumentIntegration() {
     // Lines 1587-1603: major integration test
+    // Adjusted for Bonsai features: removeComments, removeScriptTypeAttributes,
+    // removeStyleLinkTypeAttributes, collapseBooleanAttributes
     let input = "<script type=\"text/javascript\">var = \"hello\";</script>\r\n\r\n\r\n" +
       "<style type=\"text/css\">#foo { color: red;        }          </style>\r\n\r\n\r\n" +
       "<div>\r\n  <div>\r\n    <div><!-- hello -->\r\n      <div>" +
@@ -254,13 +546,14 @@ final class BonsaiTests: XCTestCase {
       "</div>\r\n        </div>\r\n      </div>\r\n    </div>\r\n  </div>\r\n</div>" +
       "<pre>       \r\nxxxx</pre><span>x</span> <span>Hello</span> <b>billy</b>     \r\n" +
       "<input type=\"text\">\r\n<textarea></textarea>\r\n<pre></pre>"
-    let expected = "<script>var = \"hello\";</script>\n" +
-      "<style>#foo { color: red;        } </style>\n" +
-      "<div>\n<div>\n<div>\n<div><!--! hello -->\n<div>\n<div>\n" +
-      "<textarea disabled>     this is a textarea </textarea>\n" +
-      "</div>\n</div>\n</div>\n</div>\n</div>\n</div>" +
-      "<pre>       \r\nxxxx</pre><span>x</span> <span>Hello</span> <b>billy</b>\n" +
-      "<input>\n<textarea></textarea>\n<pre></pre>"
+    let expected = "<script>var = \"hello\";</script>" +
+      "<style>#foo { color: red;        }</style>" +
+      "<div><div><div>" +
+      "<div><!--! hello --><div><div>" +
+      "<textarea disabled>     this is a textarea </textarea>" +
+      "</div></div></div></div></div></div>" +
+      "<pre>       \r\nxxxx</pre><span>x</span> <span>Hello</span> <b>billy</b> " +
+      "<input> <textarea></textarea><pre></pre>"
     XCTAssertEqual(Bonsai.minifyHTML(input), expected)
   }
 
@@ -448,7 +741,7 @@ final class BonsaiTests: XCTestCase {
     // Lines 568-580: processConditionalComments minifies inner content
     XCTAssertEqual(
       Bonsai.minifyHTML("<!--[if IE 7]>\n\n   \t\n   \t\t <link rel=\"stylesheet\" href=\"/css/ie7-fixes.css\" type=\"text/css\" />\n\t<![endif]-->"),
-      "<!--[if IE 7]>\n<link rel=\"stylesheet\" href=\"/css/ie7-fixes.css\">\n<![endif]-->"
+      "<!--[if IE 7]><link rel=\"stylesheet\" href=\"/css/ie7-fixes.css\"><![endif]-->"
     )
   }
 
@@ -456,7 +749,7 @@ final class BonsaiTests: XCTestCase {
     // Lines 582-590
     XCTAssertEqual(
       Bonsai.minifyHTML("<!--[if lte IE 6]>\n    \n   \n\n\n\t<p title=\" sigificant     whitespace   \">blah blah</p><![endif]-->"),
-      "<!--[if lte IE 6]>\n<p title=\"sigificant whitespace\">blah blah</p><![endif]-->"
+      "<!--[if lte IE 6]><p title=\"sigificant whitespace\">blah blah</p><![endif]-->"
     )
   }
 
@@ -798,254 +1091,18 @@ final class BonsaiTests: XCTestCase {
   }
 
   // ============================================================================
-  // MARK: - Additional whitespace tests
+  // MARK: - Space normalization between attributes
 
-  // ============================================================================
-
-  func testConservativeCollapseMultipleSpaces() {
-    XCTAssertEqual(Bonsai.minifyHTML("<p>foo    bar</p>"), "<p>foo bar</p>")
-  }
-
-  func testConservativeCollapseTrailingSpace() {
-    XCTAssertEqual(Bonsai.minifyHTML("<p>foo    bar </p>"), "<p>foo bar </p>")
-  }
-
-  func testConservativeCollapseTabs() {
-    XCTAssertEqual(Bonsai.minifyHTML("<p>foo\t\tbar</p>"), "<p>foo bar</p>")
-  }
-
-  func testWhitespaceOnlyNoNewlines() {
-    XCTAssertEqual(Bonsai.minifyHTML("   "), " ")
-  }
-
-  func testWhitespaceOnlyWithNewlines() {
-    XCTAssertEqual(Bonsai.minifyHTML("   \n\t  "), "\n")
-  }
-
-  func testNewlinesBetweenBlocks() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<div>\n  <p>hi</p>\n</div>"),
-      "<div>\n<p>hi</p>\n</div>"
-    )
-  }
-
-  func testNewlinesBetweenParagraphs() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<p>a</p>\n\n<p>b</p>"),
-      "<p>a</p>\n<p>b</p>"
-    )
-  }
-
-  func testNewlineAroundParagraph() {
-    XCTAssertEqual(Bonsai.minifyHTML("a\n<p>b</p>\nc"), "a\n<p>b</p>\nc")
-  }
-
-  func testNewlineAtEndOfParagraph() {
-    XCTAssertEqual(Bonsai.minifyHTML("<p>text\n</p>"), "<p>text\n</p>")
-  }
-
-  func testNewlineAtStartOfParagraph() {
-    XCTAssertEqual(Bonsai.minifyHTML("<p>\ntext</p>"), "<p>\ntext</p>")
-  }
-
-  func testInternalNewlineCollapsesToSpace() {
-    XCTAssertEqual(Bonsai.minifyHTML("<p>a\nb</p>"), "<p>a b</p>")
-  }
-
-  func testMultipleInternalNewlines() {
-    XCTAssertEqual(Bonsai.minifyHTML("<p>a\n\n\nb</p>"), "<p>a b</p>")
-  }
-
-  func testTopLevelNewlinesCollapseToSpace() {
-    XCTAssertEqual(Bonsai.minifyHTML("text\n\ntext"), "text text")
-  }
-
-  func testDivTextWithTrailingNewline() {
-    XCTAssertEqual(Bonsai.minifyHTML("<div>  text \n </div>"), "<div> text\n</div>")
-  }
-
-  func testDivTextWithLeadingNewline() {
-    XCTAssertEqual(Bonsai.minifyHTML("<div>\ntext  </div>"), "<div>\ntext </div>")
-  }
-
-  func testCRLFHandled() {
-    XCTAssertEqual(Bonsai.minifyHTML("<p>text\r\n</p>"), "<p>text\n</p>")
-  }
-
-  func testMixedWhitespaceWithNewline() {
-    XCTAssertEqual(Bonsai.minifyHTML("<p>foo \t\n\t bar</p>"), "<p>foo bar</p>")
-  }
-
-  func testWhitespaceBetweenDivs() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<div>  </div>  \n  <div>  </div>"),
-      "<div> </div>\n<div> </div>"
-    )
-  }
-
-  func testNewlinesAroundInput() {
-    XCTAssertEqual(Bonsai.minifyHTML("test\n\n<input>\n\ntest"), "test\n<input>\ntest")
-  }
-
-  // ============================================================================
-  // MARK: - Pre/textarea additional tests
-
-  // ============================================================================
-
-  func testPreExactPreservation() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<pre>  a\n  b  </pre>"),
-      "<pre>  a\n  b  </pre>"
-    )
-  }
-
-  func testTextareaExactPreservation() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<textarea>  a\n  b  </textarea>"),
-      "<textarea>  a\n  b  </textarea>"
-    )
-  }
-
-  func testNestedPreTags() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<pre>  <code>  hello  </code>  </pre>"),
-      "<pre>  <code>  hello  </code>  </pre>"
-    )
-  }
-
-  func testMultiplePreservedElements() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<pre>  a  </pre><textarea>  b  </textarea>"),
-      "<pre>  a  </pre><textarea>  b  </textarea>"
-    )
-  }
-
-  func testUppercasePreNotRecognized() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<PRE>  hello   world  </PRE>"),
-      "<PRE> hello world </PRE>"
-    )
-  }
-
-  func testUppercaseTextareaNotRecognized() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<TEXTAREA>  hello   world  </TEXTAREA>"),
-      "<TEXTAREA> hello world </TEXTAREA>"
-    )
-  }
-
-  // ============================================================================
-  // MARK: - Script/style content additional tests
-
-  // ============================================================================
-
-  func testScriptContentSimple() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<script>  alert(1)  </script>"),
-      "<script> alert(1) </script>"
-    )
-  }
-
-  func testScriptContentWithNewlines() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<script>\n  var x = 1;\n</script>"),
-      "<script>\nvar x = 1;\n</script>"
-    )
-  }
-
-  func testScriptContentPreservesInternal() {
-    // Internal whitespace preserved, only leading/trailing trimmed
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<script>  var x = 1;  \n  var y = 2;  </script>"),
-      "<script> var x = 1;  \n  var y = 2; </script>"
-    )
-  }
-
-  func testStyleContentSimple() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<style>  body { color: red; }  </style>"),
-      "<style> body { color: red; } </style>"
-    )
-  }
-
-  func testUppercaseScriptContent() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<SCRIPT>  var x = 1;  </SCRIPT>"),
-      "<SCRIPT> var x = 1; </SCRIPT>"
-    )
-  }
-
-  func testUppercaseStyleContent() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<STYLE>  body { }  </STYLE>"),
-      "<STYLE> body { } </STYLE>"
-    )
-  }
-
-  // ============================================================================
-  // MARK: - Self-closing tags / void elements
-
+  // html-minifier-next: "Space normalization between attributes" (lines 174-181)
   // ============================================================================
 
   func testSelfClosingSlashRemoved() {
+    // Line 176
     XCTAssertEqual(Bonsai.minifyHTML("<img src=\"test\"/>"), "<img src=\"test\">")
   }
 
-  func testMultipleSelfClosingTags() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<br /><img src=\"test.png\" /><hr />"),
-      "<br><img src=\"test.png\"><hr>"
-    )
-  }
-
-  func testNonVoidSelfClosingSlashRemoved() {
-    XCTAssertEqual(Bonsai.minifyHTML("<div />"), "<div>")
-    XCTAssertEqual(Bonsai.minifyHTML("<span />"), "<span>")
-  }
-
-  // ============================================================================
-  // MARK: - SVG/MathML self-closing
-
-  // ============================================================================
-
-  func testSvgSelfClosingPreserved() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<svg><circle r=\"5\"/></svg>"),
-      "<svg><circle r=\"5\"/></svg>"
-    )
-  }
-
-  func testSvgSelfClosingSpaceRemoved() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<svg><circle r=\"5\" /></svg>"),
-      "<svg><circle r=\"5\"/></svg>"
-    )
-  }
-
-  func testSvgVoidElementSlashRemoved() {
-    XCTAssertEqual(Bonsai.minifyHTML("<svg><br/></svg>"), "<svg><br></svg>")
-  }
-
-  func testMathMLSelfClosingPreserved() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<math><mspace width=\"1em\"/></math>"),
-      "<math><mspace width=\"1em\"/></math>"
-    )
-  }
-
-  func testNestedSvgThenNormal() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<div><svg><circle r=\"5\"/></svg><span/></div>"),
-      "<div><svg><circle r=\"5\"/></svg><span></div>"
-    )
-  }
-
-  // ============================================================================
-  // MARK: - Attribute space normalization
-
-  // ============================================================================
-
   func testNormalizesSpaceAroundEquals() {
+    // Line 177
     XCTAssertEqual(
       Bonsai.minifyHTML("<p title = \"bar\">foo</p>"),
       "<p title=\"bar\">foo</p>"
@@ -1053,13 +1110,23 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testNormalizesMultilineAttribute() {
+    // Line 178
     XCTAssertEqual(
       Bonsai.minifyHTML("<p title\n\n\t  =\n     \"bar\">foo</p>"),
       "<p title=\"bar\">foo</p>"
     )
   }
 
+  func testMultilineSlashRemoved() {
+    // Line 179
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<img src=\"test\" \n\t />"),
+      "<img src=\"test\">"
+    )
+  }
+
   func testNormalizesMultipleAttributeSpaces() {
+    // Line 180
     XCTAssertEqual(
       Bonsai.minifyHTML("<input title=\"bar\"       id=\"boo\"    value=\"hello world\">"),
       "<input title=\"bar\" id=\"boo\" value=\"hello world\">"
@@ -1067,107 +1134,164 @@ final class BonsaiTests: XCTestCase {
   }
 
   // ============================================================================
-  // MARK: - Case preservation
+  // MARK: - Types of whitespace that should always be preserved
 
+  // html-minifier-next: "Types of whitespace that should always be preserved" (lines 378-413)
   // ============================================================================
 
-  func testPreservesTagCase() {
-    XCTAssertEqual(Bonsai.minifyHTML("<DIV>hello</DIV>"), "<DIV>hello</DIV>")
-    XCTAssertEqual(Bonsai.minifyHTML("<Span>text</Span>"), "<Span>text</Span>")
-  }
-
-  func testPreservesAttributeNameCase() {
+  func testHairSpacePreservedInText() {
+    // Lines 380-381
     XCTAssertEqual(
-      Bonsai.minifyHTML("<div onClick=\"foo()\">bar</div>"),
-      "<div onClick=\"foo()\">bar</div>"
+      Bonsai.minifyHTML("<div>\u{200A}fo\u{200A}o\u{200A}</div>"),
+      "<div>\u{200A}fo\u{200A}o\u{200A}</div>"
     )
   }
 
-  func testPreservesDataAttributes() {
+  func testHairSpaceEntityPreserved() {
+    // Lines 384-385: Bonsai does not decode entities, so &#8202; passes through
     XCTAssertEqual(
-      Bonsai.minifyHTML("<div data-MyValue=\"test\">bar</div>"),
-      "<div data-MyValue=\"test\">bar</div>"
+      Bonsai.minifyHTML("<div>&#8202;fo&#8202;o&#8202;</div>"),
+      "<div>&#8202;fo&#8202;o&#8202;</div>"
+    )
+  }
+
+  func testNbspPreservedInText() {
+    // Lines 391-392
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<div>\u{00A0}fo\u{00A0}o\u{00A0}</div>"),
+      "<div>\u{00A0}fo\u{00A0}o\u{00A0}</div>"
+    )
+  }
+
+  func testNbspEntityPreserved() {
+    // Lines 395-396: Bonsai does not decode entities, so &nbsp; passes through
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<div>&nbsp;fo&nbsp;o&nbsp;</div>"),
+      "<div>&nbsp;fo&nbsp;o&nbsp;</div>"
+    )
+  }
+
+  func testHairSpacePreservedInAttribute() {
+    // Lines 406-407
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<p class=\"foo\u{200A}bar\"></p>"),
+      "<p class=\"foo\u{200A}bar\"></p>"
     )
   }
 
   // ============================================================================
-  // MARK: - Edge cases
+  // MARK: - caseSensitive
 
+  // html-minifier-next: "caseSensitive" (lines 2422-2429)
   // ============================================================================
 
-  func testEmptyDocument() {
-    XCTAssertEqual(Bonsai.minifyHTML(""), "")
-  }
-
-  func testPlainText() {
-    XCTAssertEqual(Bonsai.minifyHTML("hello world"), "hello world")
-  }
-
-  func testPlainTextMultipleSpaces() {
-    XCTAssertEqual(Bonsai.minifyHTML("hello   world"), "hello world")
-  }
-
-  func testHairSpacePreserved() {
-    XCTAssertEqual(Bonsai.minifyHTML("<p>foo\u{200A}bar</p>"), "<p>foo\u{200A}bar</p>")
-  }
-
-  func testNoBreakSpacePreserved() {
-    XCTAssertEqual(Bonsai.minifyHTML("<p>foo\u{00A0}bar</p>"), "<p>foo\u{00A0}bar</p>")
-  }
-
-  func testCDATAContent() {
+  func testCaseSensitiveAttributePreserved() {
+    // Line 2427: caseSensitive: true preserves mixed-case attribute names
     XCTAssertEqual(
-      Bonsai.minifyHTML("<![CDATA[  content  ]]>"),
-      " content "
+      Bonsai.minifyHTML("<div mixedCaseAttribute=\"value\"></div>"),
+      "<div mixedCaseAttribute=\"value\"></div>"
     )
   }
 
-  func testUnquotedAttributeValues() {
+  // ============================================================================
+  // MARK: - Mixed HTML and SVG
+
+  // html-minifier-next: "Mixed HTML and SVG" (lines 2441-2464)
+  // ============================================================================
+
+  func testMixedHtmlAndSvg() {
+    // Lines 2442-2463
+    let input = "<html><body>\n" +
+      "  <svg version=\"1.1\" id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" x=\"0px\" y=\"0px\"\n" +
+      "     width=\"612px\" height=\"502.174px\" viewBox=\"0 65.326 612 502.174\" enable-background=\"new 0 65.326 612 502.174\"\n" +
+      "     xml:space=\"preserve\" class=\"logo\">    <ellipse class=\"ground\" cx=\"283.5\" cy=\"487.5\" rx=\"259\" ry=\"80\"/>    <polygon points=\"100,10 40,198 190,78 10,78 160,198\"\n" +
+      "      style=\"fill:lime;stroke:purple;stroke-width:5;fill-rule:evenodd;\" />\n" +
+      "    <filter id=\"pictureFilter\">\n" +
+      "      <feGaussianBlur stdDeviation=\"15\" />\n" +
+      "    </filter>\n" +
+      "  </svg>\n" +
+      "</body></html>"
+    let expected = "<html><body>" +
+      "<svg version=\"1.1\" id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" x=\"0px\" y=\"0px\" " +
+      "width=\"612px\" height=\"502.174px\" viewBox=\"0 65.326 612 502.174\" enable-background=\"new 0 65.326 612 502.174\" " +
+      "xml:space=\"preserve\" class=\"logo\">" +
+      "<ellipse class=\"ground\" cx=\"283.5\" cy=\"487.5\" rx=\"259\" ry=\"80\"/>" +
+      "<polygon points=\"100,10 40,198 190,78 10,78 160,198\" style=\"fill:lime;stroke:purple;stroke-width:5;fill-rule:evenodd;\"/>" +
+      "<filter id=\"pictureFilter\">" +
+      "<feGaussianBlur stdDeviation=\"15\"/>" +
+      "</filter></svg></body></html>"
+    XCTAssertEqual(Bonsai.minifyHTML(input), expected)
+  }
+
+  // ============================================================================
+  // MARK: - SVG and MathML self-closing elements
+
+  // html-minifier-next: "SVG and MathML self-closing elements" (lines 2466-2491)
+  // ============================================================================
+
+  func testSvgPreservesClosingSlash() {
+    // Lines 2468-2470: SVG elements keep />, HTML void elements don't
     XCTAssertEqual(
-      Bonsai.minifyHTML("<div class=foo>bar</div>"),
-      "<div class=\"foo\">bar</div>"
+      Bonsai.minifyHTML("<div><img src=\"test.jpg\"/><svg><path d=\"M 0 0\"/><circle cx=\"5\" cy=\"5\" r=\"2\"/></svg><br/></div>"),
+      "<div><img src=\"test.jpg\"><svg><path d=\"M 0 0\"/><circle cx=\"5\" cy=\"5\" r=\"2\"/></svg><br></div>"
     )
   }
 
-  func testAttributeWithoutValue() {
+  func testMathMLPreservesClosingSlash() {
+    // Lines 2473-2475
     XCTAssertEqual(
-      Bonsai.minifyHTML("<div data-custom>hello</div>"),
-      "<div data-custom>hello</div>"
+      Bonsai.minifyHTML("<div><math><mrow><mi>x</mi></mrow><mspace width=\"1em\"/><mrow><mi>y</mi></mrow></math></div>"),
+      "<div><math><mrow><mi>x</mi></mrow><mspace width=\"1em\"/><mrow><mi>y</mi></mrow></math></div>"
+    )
+  }
+
+  func testNestedSvgGroups() {
+    // Lines 2483-2485
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<svg><g><path d=\"M 0 0\"/><g><circle cx=\"5\" cy=\"5\" r=\"2\"/></g></g></svg>"),
+      "<svg><g><path d=\"M 0 0\"/><g><circle cx=\"5\" cy=\"5\" r=\"2\"/></g></g></svg>"
+    )
+  }
+
+  func testSvgVoidElements() {
+    // Lines 2488-2490
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<svg><line x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"/><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\"/><use href=\"#x\"/></svg>"),
+      "<svg><line x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"/><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\"/><use href=\"#x\"/></svg>"
     )
   }
 
   // ============================================================================
   // MARK: - Remove redundant attributes
 
-  // html-minifier-next: "Remove redundant attributes" (lines 1089-1218)
+  // html-minifier-next: "Remove redundant attributes" (lines 1089-1157)
+  // Tests marked (composite) are extracted from "Attribute value defaults" (lines 1175-1218)
+  // with pre-quoted inputs since Bonsai always quotes unquoted attributes.
   // ============================================================================
 
   func testRemoveRedundantFormMethodGet() {
+    // Line 1092-1093
     XCTAssertEqual(
       Bonsai.minifyHTML("<form method=\"get\">hello world</form>"),
       "<form>hello world</form>"
     )
   }
 
-  func testRemoveRedundantInputTypeText() {
-    XCTAssertEqual(Bonsai.minifyHTML("<input type=\"text\">"), "<input>")
-  }
-
-  func testRemoveRedundantButtonTypeSubmit() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<button type=\"submit\">Go</button>"),
-      "<button>Go</button>"
-    )
-  }
-
   func testKeepFormMethodPost() {
+    // Line 1095-1096
     XCTAssertEqual(
       Bonsai.minifyHTML("<form method=\"post\">hello world</form>"),
       "<form method=\"post\">hello world</form>"
     )
   }
 
+  func testRemoveRedundantInputTypeText() {
+    // Line 1102-1103
+    XCTAssertEqual(Bonsai.minifyHTML("<input type=\"text\">"), "<input>")
+  }
+
   func testRemoveInputTypeTextWithWhitespace() {
+    // Line 1105-1106
     XCTAssertEqual(
       Bonsai.minifyHTML("<input type=\"  TEXT  \" value=\"foo\">"),
       "<input value=\"foo\">"
@@ -1175,6 +1299,7 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testKeepInputTypeCheckbox() {
+    // Line 1108-1109
     XCTAssertEqual(
       Bonsai.minifyHTML("<input type=\"checkbox\">"),
       "<input type=\"checkbox\">"
@@ -1182,6 +1307,7 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testRemoveAnchorRedundantName() {
+    // Line 1115-1116
     XCTAssertEqual(
       Bonsai.minifyHTML("<a id=\"foo\" name=\"foo\">blah</a>"),
       "<a id=\"foo\">blah</a>"
@@ -1189,6 +1315,7 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testKeepInputNameWithId() {
+    // Line 1118-1119
     XCTAssertEqual(
       Bonsai.minifyHTML("<input id=\"foo\" name=\"foo\">"),
       "<input id=\"foo\" name=\"foo\">"
@@ -1196,6 +1323,7 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testKeepAnchorNameWithoutId() {
+    // Line 1121-1122
     XCTAssertEqual(
       Bonsai.minifyHTML("<a name=\"foo\">blah</a>"),
       "<a name=\"foo\">blah</a>"
@@ -1203,34 +1331,39 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testRemoveAnchorNameMatchingIdTrimmed() {
+    // Line 1124-1125: Uses Unicode ellipsis U+2026, trailing space before >
     XCTAssertEqual(
-      Bonsai.minifyHTML("<a href=\"...\" name=\"  bar  \" id=\"bar\">blah</a>"),
-      "<a href=\"...\" id=\"bar\">blah</a>"
+      Bonsai.minifyHTML("<a href=\"\u{2026}\" name=\"  bar  \" id=\"bar\" >blah</a>"),
+      "<a href=\"\u{2026}\" id=\"bar\">blah</a>"
     )
   }
 
   func testRemoveScriptCharsetWithoutSrc() {
+    // Line 1131-1133: Bonsai also removes type="text/javascript" via removeScriptTypeAttributes
     XCTAssertEqual(
-      Bonsai.minifyHTML("<script charset=\"UTF-8\">alert(222);</script>"),
+      Bonsai.minifyHTML("<script type=\"text/javascript\" charset=\"UTF-8\">alert(222);</script>"),
       "<script>alert(222);</script>"
     )
   }
 
   func testKeepScriptCharsetWithSrc() {
+    // Line 1135-1136: Bonsai removes type but keeps charset (src present)
     XCTAssertEqual(
-      Bonsai.minifyHTML("<script src=\"https://example.com\" charset=\"UTF-8\">alert(222);</script>"),
+      Bonsai.minifyHTML("<script type=\"text/javascript\" src=\"https://example.com\" charset=\"UTF-8\">alert(222);</script>"),
       "<script src=\"https://example.com\" charset=\"UTF-8\">alert(222);</script>"
     )
   }
 
   func testRemoveScriptCharsetUppercase() {
+    // Line 1138-1140: Uses Unicode ellipsis U+2026
     XCTAssertEqual(
-      Bonsai.minifyHTML("<script CHARSET=\" ... \">alert(222);</script>"),
+      Bonsai.minifyHTML("<script CHARSET=\" \u{2026} \">alert(222);</script>"),
       "<script>alert(222);</script>"
     )
   }
 
   func testRemoveScriptLanguage() {
+    // Line 1146-1147
     XCTAssertEqual(
       Bonsai.minifyHTML("<script language=\"Javascript\">x=2,y=4</script>"),
       "<script>x=2,y=4</script>"
@@ -1238,6 +1371,7 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testRemoveScriptLanguageWithWhitespace() {
+    // Line 1149-1150
     XCTAssertEqual(
       Bonsai.minifyHTML("<script LANGUAGE = \"  javaScript  \">x=2,y=4</script>"),
       "<script>x=2,y=4</script>"
@@ -1245,39 +1379,30 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testRemoveAreaShapeRect() {
+    // Line 1154-1156
     XCTAssertEqual(
       Bonsai.minifyHTML("<area shape=\"rect\" coords=\"696,25,958,47\" href=\"#\" title=\"foo\">"),
       "<area coords=\"696,25,958,47\" href=\"#\" title=\"foo\">"
     )
   }
 
-  func testRemoveImgLoadingEager() {
-    XCTAssertEqual(Bonsai.minifyHTML("<img loading=\"eager\">"), "<img>")
-  }
-
-  func testKeepImgLoadingLazy() {
+  func testRemoveRedundantButtonTypeSubmit() {
+    // Lines 1182-1183 / 1203 (composite)
     XCTAssertEqual(
-      Bonsai.minifyHTML("<img loading=\"lazy\">"),
-      "<img loading=\"lazy\">"
+      Bonsai.minifyHTML("<button type=\"submit\">Go</button>"),
+      "<button>Go</button>"
     )
   }
 
-  func testRemoveImgFetchpriorityAuto() {
+  func testRemoveImgDefaultAttributes() {
+    // Lines 1185 / 1206 (composite): loading="eager", fetchpriority="auto", decoding="auto"
+    XCTAssertEqual(Bonsai.minifyHTML("<img loading=\"eager\">"), "<img>")
     XCTAssertEqual(Bonsai.minifyHTML("<img fetchpriority=\"auto\">"), "<img>")
-  }
-
-  func testRemoveImgDecodingAuto() {
     XCTAssertEqual(Bonsai.minifyHTML("<img decoding=\"auto\">"), "<img>")
   }
 
-  func testKeepButtonTypeButton() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<button type=\"button\">Go</button>"),
-      "<button type=\"button\">Go</button>"
-    )
-  }
-
   func testRemoveStyleMediaAll() {
+    // Lines 1180 / 1201 (composite)
     XCTAssertEqual(
       Bonsai.minifyHTML("<style media=\"all\"></style>"),
       "<style></style>"
@@ -1285,6 +1410,7 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testRemoveLinkMediaAll() {
+    // Lines 1179 / 1200 (composite)
     XCTAssertEqual(
       Bonsai.minifyHTML("<link rel=\"stylesheet\" media=\"all\">"),
       "<link rel=\"stylesheet\">"
@@ -1292,6 +1418,7 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testRemoveTextareaWrapSoft() {
+    // Lines 1193 / 1214 (composite)
     XCTAssertEqual(
       Bonsai.minifyHTML("<textarea wrap=\"soft\"></textarea>"),
       "<textarea></textarea>"
@@ -1299,6 +1426,7 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testRemoveTrackKindSubtitles() {
+    // Lines 1195 / 1216 (composite)
     XCTAssertEqual(
       Bonsai.minifyHTML("<track src=\"example\" kind=\"subtitles\">"),
       "<track src=\"example\">"
@@ -1306,6 +1434,7 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testRemoveHtmlDirLtr() {
+    // Lines 1177 / 1198 (composite)
     XCTAssertEqual(Bonsai.minifyHTML("<html dir=\"ltr\">"), "<html>")
   }
 
@@ -1316,27 +1445,22 @@ final class BonsaiTests: XCTestCase {
   // ============================================================================
 
   func testRemoveEmptyAttributes() {
+    // Line 954-955
     XCTAssertEqual(
       Bonsai.minifyHTML("<p id=\"\" class=\"\" STYLE=\" \" title=\"\n\" lang=\"\" dir=\"\">x</p>"),
       "<p>x</p>"
     )
   }
 
-  func testRemoveEmptyEventHandlers() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<p onclick=\"\" ondblclick=\" \" onmousedown=\"\" onmouseup=\"\" onmouseover=\" \" onmousemove=\"\" onmouseout=\"\">x</p>"),
-      "<p>x</p>"
-    )
-  }
-
-  func testRemoveEmptyKeyboardHandlers() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<p onkeypress=\"\" onkeydown=\"\" onkeyup=\"\">x</p>"),
-      "<p>x</p>"
-    )
+  func testRemoveEmptyEventAndKeyboardHandlers() {
+    // Lines 957-959: Combined mouse + keyboard handlers
+    let input = "<p onclick=\"\"   ondblclick=\" \" onmousedown=\"\" ONMOUSEUP=\"\" onmouseover=\" \" onmousemove=\"\" onmouseout=\"\" " +
+      "onkeypress=\n\n  \"\n     \" onkeydown=\n\"\" onkeyup\n=\"\">x</p>"
+    XCTAssertEqual(Bonsai.minifyHTML(input), "<p>x</p>")
   }
 
   func testRemoveEmptyFocusHandlersKeepValue() {
+    // Line 961-962
     XCTAssertEqual(
       Bonsai.minifyHTML("<input onfocus=\"\" onblur=\"\" onchange=\" \" value=\" boo \">"),
       "<input value=\" boo \">"
@@ -1344,6 +1468,7 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testRemoveEmptyInputValue() {
+    // Line 964-965
     XCTAssertEqual(
       Bonsai.minifyHTML("<input value=\"\" name=\"foo\">"),
       "<input name=\"foo\">"
@@ -1351,6 +1476,7 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testKeepEmptyImgSrcAndAlt() {
+    // Line 967-968
     XCTAssertEqual(
       Bonsai.minifyHTML("<img src=\"\" alt=\"\">"),
       "<img src=\"\" alt=\"\">"
@@ -1358,71 +1484,79 @@ final class BonsaiTests: XCTestCase {
   }
 
   func testRemoveBareEmptyAttributes() {
+    // Line 971-972
     XCTAssertEqual(
       Bonsai.minifyHTML("<div data-foo class id style title lang dir onfocus onblur onchange onclick ondblclick onmousedown onmouseup onmouseover onmousemove onmouseout onkeypress onkeydown onkeyup></div>"),
       "<div data-foo></div>"
     )
   }
 
-  func testKeepEmptyDataAttributes() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<div data-x=\"\">hello</div>"),
-      "<div data-x=\"\">hello</div>"
-    )
-  }
-
   // ============================================================================
   // MARK: - Collapse attribute whitespace
 
-  // html-minifier-next: "Collapse attribute whitespace" (lines 4199-4273)
+  // html-minifier-next: "Collapse attribute whitespace" (lines 4199-4274)
   // ============================================================================
 
   func testCollapseAttributeWhitespace() {
+    // Lines 4208-4210
+    let input = "<article title=\"foo  bar\" data-selector=\"teaser-object parent-image-label picture-article\" data-external-selector=\"\n      teaser-object parent-image-label \n        \n    \"></article>"
+    let expected = "<article title=\"foo bar\" data-selector=\"teaser-object parent-image-label picture-article\" data-external-selector=\"teaser-object parent-image-label\"></article>"
+    XCTAssertEqual(Bonsai.minifyHTML(input), expected)
+  }
+
+  func testCollapseMediaAttributeWhitespace() {
+    // Lines 4219-4223
     XCTAssertEqual(
-      Bonsai.minifyHTML("<div title=\"foo  bar\">x</div>"),
-      "<div title=\"foo bar\">x</div>"
+      Bonsai.minifyHTML("<source media=\"(min-width:  768px)\">"),
+      "<source media=\"(min-width: 768px)\">"
     )
   }
 
   func testTrimAndCollapseAttributeWhitespace() {
+    // Lines 4226-4229
     XCTAssertEqual(
-      Bonsai.minifyHTML("<div title=\"  hello  world  \">x</div>"),
-      "<div title=\"hello world\">x</div>"
+      Bonsai.minifyHTML("<div title=\"  hello world  \"></div>"),
+      "<div title=\"hello world\"></div>"
     )
   }
 
   func testCollapseNewlinesTabsInAttribute() {
+    // Lines 4242-4244
     XCTAssertEqual(
-      Bonsai.minifyHTML("<div data-value=\"hello\t\tworld\n\ntest\">x</div>"),
-      "<div data-value=\"hello world test\">x</div>"
+      Bonsai.minifyHTML("<div data-value=\"hello\t\tworld\n\ntest\"></div>"),
+      "<div data-value=\"hello world test\"></div>"
     )
   }
 
   func testNoChangeCleanAttribute() {
+    // Lines 4247-4248
     XCTAssertEqual(
-      Bonsai.minifyHTML("<p class=\"foo bar baz\">x</p>"),
-      "<p class=\"foo bar baz\">x</p>"
-    )
-  }
-
-  func testCollapseMultilineAttribute() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<article data-external-selector=\"\n      teaser-object parent-image-label \n        \n    \">x</article>"),
-      "<article data-external-selector=\"teaser-object parent-image-label\">x</article>"
-    )
-  }
-
-  func testNoBreakSpaceNotCollapsedInAttribute() {
-    XCTAssertEqual(
-      Bonsai.minifyHTML("<div title=\"foo\u{00A0}\u{00A0}bar\">x</div>"),
-      "<div title=\"foo\u{00A0}\u{00A0}bar\">x</div>"
+      Bonsai.minifyHTML("<p class=\"foo bar baz\"></p>"),
+      "<p class=\"foo bar baz\"></p>"
     )
   }
 
   func testAttributeWhitespaceWithTextCollapsing() {
+    // Lines 4256-4258
     XCTAssertEqual(
       Bonsai.minifyHTML("<p title=\"  foo   bar  \">\n  Hello   \n  world  \n</p>"),
-      "<p title=\"foo bar\">\nHello world\n</p>"
+      "<p title=\"foo bar\">Hello world</p>"
+    )
+  }
+
+  func testHairSpacePreservedInAttributeCollapse() {
+    // Lines 4261-4263
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<div title=\"foo\u{200A}bar  baz\"></div>"),
+      "<div title=\"foo\u{200A}bar baz\"></div>"
+    )
+  }
+
+  func testNoBreakSpaceNotCollapsedInAttribute() {
+    // Lines 4266-4267
+    XCTAssertEqual(
+      Bonsai.minifyHTML("<div title=\"foo\u{00A0}\u{00A0}bar\"></div>"),
+      "<div title=\"foo\u{00A0}\u{00A0}bar\"></div>"
     )
   }
 }

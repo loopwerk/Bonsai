@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.svg" width="200" alt="Bonsai" />
+</p>
+
 # Bonsai
 
 An HTML minifier in pure Swift.
